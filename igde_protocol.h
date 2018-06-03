@@ -1,0 +1,142 @@
+#define S_REQ_ID 100
+#define O_SEND_ID 101
+#define C_SEND_ID 102
+#define E_SEND_ID 103
+
+// Message Types
+#define UNKNOWN_TYPE 200
+#define SERVER_TYPE 201
+#define OWNER_TYPE 202
+#define EDITOR_TYPE 203
+#define CONTROL_TYPE 204
+
+// Server Connection States
+#define S_NEW_CONN 300
+#define S_AUTH 301
+
+// Owner States
+#define O_DISCONNECTED 400
+#define O_NEW_OWNER 401
+#define O_CONNECTED 402
+#define O_SESSION_READY 406
+#define O_ACCEPTING 403
+#define O_FULL 404
+#define O_UPLOADING 405
+
+#define O_FREE 406
+#define O_OPEN 407
+
+// Editor States
+#define E_NEW_EDITOR 500
+#define E_EDITOR_WAITING 501
+#define E_EDITOR_CLOSED 503
+
+// Server Message Commands
+#define S_SEND_TYPE 600
+
+// Owner to Server Message Commands
+#define OS_OK 1000
+#define SO_OK 1000
+
+#define OS_SET_OWNER_TYPE 1002
+#define SO_OWNER_TYPE_SET 1002
+
+#define OS_BYE 1003
+#define SO_BYE 1003
+
+#define OS_REG_SESSION 1005
+#define SO_SESSION_REGD 1006
+#define SO_SESSION_NOT_REGD 1007
+#define OS_END_SESSION 1008
+#define SO_SESSION_ENDED 1009
+#define SO_SESSION_NOT_ENDED 1010
+#define OS_CLOSE_SESSION 1011
+#define SO_SESSION_CLOSED 1012
+#define OS_OPEN_SESSION 1013
+#define SO_SESSION_OPENED 1014
+#define SO_SESSIONS_NOT_OPENED 1015
+
+// Editor to Server Message Commands
+#define ES_OK 2000
+#define SE_OK 2000
+
+
+#define ES_SET_EDITOR_TYPE 2001
+#define SE_EDITOR_TYPE_SET 2002
+
+#define ES_GET_SESSIONS 3003
+#define SE_SESSION_LIST 3004
+#define ES_JOIN_SESSION 3005
+#define SE_SESSION_JOINED 3006
+#define SE_SESSION_NOT_JOINED 3007
+#define ES_LEAVE_SESSION 3008
+#define SE_SESSION_LEFT 3009
+
+
+// Editor to Owner Message Commands
+#define EO_OK 5000
+#define EO_HELLO 5001
+#define EO_BYE 5002
+#define EO_JOIN 5003
+
+// Owner to Editor Message Commands
+#define OE_OK 6000
+#define OE_HELLO 6001
+#define OE_BYE 6002
+#define OE_INVITE 6003
+
+
+#define SO_CMD 1
+#define SO_REQ 2
+#define SO_RES 3
+
+#define OS_DATA 4
+
+// Control to Owner Messages
+#define CO_CONNECT_SRV 7000
+#define OC_SRV_CONNECTED 7001
+#define OC_SRV_NOT_CONNECTED 7002
+
+#define CO_DISCONNECT_SRV 7010
+#define OC_SRV_DISCONNECTED 7011
+#define OC_SRV_NOT_DISCONNECTED 7012
+
+#define CO_START_SESSION 7020
+#define OC_SESSION_STARTED 7021
+#define OC_SESSION_NOT_STARTED 7022
+
+#define OC_UPLOAD_FILE 7030
+#define CO_UPLOAD_STARTING 7031
+#define OC_UPLOAD_GO 7032
+#define CO_UPLOAD_CHUNK 7033
+#define OC_UPLOAD_CHUNK_OK 7034
+#define OC_UPLOAD_CHUNK_ERR 7035
+#define CO_UPLOAD_LAST_CHUNK 7036
+#define OC_UPLOAD_DONE 7037
+
+#define UPLOAD_CHUNK_SIZE 1000
+
+#define CO_OPEN_SESSION 7038
+
+#define CO_END_SESSION 7040
+#define OC_SESSION_ENDED 7041
+#define OC_SESSION_NOT_ENDED 7042
+
+#define CO_DOWNLOAD_FILE 7050
+#define OC_DOWNLOAD_STARTING 7051
+#define CO_DOWNLOAD_GO 7052
+#define OC_DOWNLOAD_CHUNK 7053
+#define CO_DOWNLOAD_CHUNK_OK 7054
+#define CO_DOWNLOAD_CHUNK_ERR 7055
+#define OD_DOWNLOAD_LAST_CHUNK 7056
+#define CO_DOWNLOAD_DONE 7057
+
+#define CO_LIST_EDITORS  7060
+#define OC_EDITOR_LIST 7061
+
+// Errors
+#define CO_CMD_FAILED 7110
+#define CO_NOT_CONNECTED 7111
+#define CO_NOT_ACTIVE 7112
+
+#define CO_SET_CONTROL_TYPE 7113
