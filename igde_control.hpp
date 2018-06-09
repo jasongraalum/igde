@@ -72,8 +72,10 @@ private:
     int session_max_editors;
     int upload_file();
 
-    std::string temp_dir = "/tmp/";
-
+    std::string editted_filename;
+    std::ofstream session_ofd;
+    int download_file();
+    
     int status;
     
     int connect_to_owner();

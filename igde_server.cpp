@@ -128,16 +128,14 @@ int IGDE_Server::listen_loop(int server_queue)
             //
             else
             {
-                for(std::list<client *>::iterator c_it = this->clients.begin();
-                   c_it != this->clients.end();
-                   c_it++)
+                for(int client_index = 0; client_index < MAX_CLIENTS; client_index++)
                 {
-                    if((int)client_ev_list[i].ident == (*c_it)->fd)
+                    if((int)client_ev_list[i].ident == this->clients[client_index].fd)
                     {
                         std::cout << "New editor message received " << std::endl;
                         IGDE_Message * msg = new IGDE_Message;
-                        msg->get_msg((*c_it)->fd);
-                        this->process_message(c_it, msg);
+                        msg->get_msg(this->clients[client_index].fd);
+                        this->process_message(client_index, msg);
                         std::cout << "Done processing message" << std::endl;
                     }
                 }
@@ -150,48 +148,41 @@ int IGDE_Server::listen_loop(int server_queue)
 
 int IGDE_Server::add_client(int fd, struct sockaddr_in * client_addr)
 {
-    
-    client * new_client = new client;
-    
-    new_client->type = UNKNOWN_TYPE;
-    new_client->fd = fd;
-    new_client->state = S_NEW_CONN;
-    
-    new_client->addr = new struct sockaddr_storage;
-    memcpy(&(new_client->addr), &client_addr, sizeof(sockaddr_storage));
-
     std::cout << "Adding new client:" << fd << std::endl;
-    this->clients.push_back(new_client);
+    int client_index = 0;
+    while(this->clients[client_index].fd != 0 && client_index < MAX_CLIENTS)
+        client_index++;
+    
+    if(client_index == MAX_CLIENTS)
+        return -1;
+    
+    this->clients[client_index].fd = fd;
+    this->clients[client_index].type = UNKNOWN_TYPE;
+    this->clients[client_index].state = S_NEW_CONN;
+    memcpy(&(this->clients[client_index].addr), &client_addr, sizeof(sockaddr_storage));
 
     // Get Client Type Message
     char connect_msg[] = "Who are you?";
     
     IGDE_Message * hello_msg = new IGDE_Message(SERVER_TYPE, S_SEND_TYPE, 0, 0, connect_msg);
-    
-
-    if(hello_msg->send_msg(new_client->fd) > 0)
+    if(hello_msg->send_msg(this->clients[client_index].fd) > 0)
         return 0;
     else
         return -1;
 
 }
 
-int IGDE_Server::remove_client(int fd)
+int IGDE_Server::remove_client(int client_index)
 {
-    std::list<client *>::iterator c_it= this->clients.begin();
-    while(c_it != this->clients.end() && (*c_it)->fd != fd)
-        c_it++;
- 
-    if(c_it != this->clients.end())
-    {
-        c_it = this->clients.erase(c_it);
-    }
-    return close(fd);
+    int client_fd = this->clients[client_index].fd;
+    this->clients[client_index].fd = 0;
+    
+    return close(client_fd);
 }
 
-int IGDE_Server::process_message(std::list<client *>::iterator client_it, IGDE_Message * msg)
+int IGDE_Server::process_message(int client_index, IGDE_Message * msg)
 {
-    int client_type = (*client_it)->type;
+    int client_type = this->clients[client_index].type;
     
     IGDE_Message * reply = NULL;
     char type_set[] = "Type Set";
@@ -200,24 +191,24 @@ int IGDE_Server::process_message(std::list<client *>::iterator client_it, IGDE_M
         case UNKNOWN_TYPE:
             if(cmd == OS_SET_OWNER_TYPE)
             {
-                (*client_it)->type = OWNER_TYPE;
-                (*client_it)->state = O_NEW_OWNER;
+                this->clients[client_index].type = OWNER_TYPE;
+                this->clients[client_index].state = O_FREE;
                 reply = new IGDE_Message(SERVER_TYPE, SO_OWNER_TYPE_SET, (TBD_T)std::strlen(type_set), 0, type_set);
-                reply->send_msg((*client_it)->fd);
+                reply->send_msg(this->clients[client_index].fd);
             }
             if(cmd == ES_SET_EDITOR_TYPE)
             {
-                (*client_it)->type = EDITOR_TYPE;
-                (*client_it)->state = E_NEW_EDITOR;
+                this->clients[client_index].type = EDITOR_TYPE;
+                this->clients[client_index].state = E_NEW_EDITOR;
                 reply = new IGDE_Message(SERVER_TYPE, SE_EDITOR_TYPE_SET, (TBD_T)std::strlen(type_set), 0, type_set);
-                reply->send_msg((*client_it)->fd);
+                reply->send_msg(this->clients[client_index].fd);
             }
             break;
         case OWNER_TYPE:
-            this->process_owner_message(client_it, msg);
+            this->process_owner_message(client_index, msg);
             break;
         case EDITOR_TYPE:
-            this->process_editor_message(client_it, msg);
+            this->process_editor_message(client_index, msg);
             break;
         default:
             std::cout << "Unknown client type" << std::endl;
@@ -227,10 +218,10 @@ int IGDE_Server::process_message(std::list<client *>::iterator client_it, IGDE_M
     
     return 0;
 }
-int IGDE_Server::process_owner_message(std::list<client *>::iterator client_it, IGDE_Message * msg)
+int IGDE_Server::process_owner_message(int client_index, IGDE_Message * msg)
 {
-    int client_fd = (*client_it)->fd;
-    int client_state = (*client_it)->state;
+    int client_fd = this->clients[client_index].fd;
+    int client_state = this->clients[client_index].state;
     int cmd = msg->get_cmd();
     std::string data(msg->get_data());
 
@@ -238,6 +229,7 @@ int IGDE_Server::process_owner_message(std::list<client *>::iterator client_it, 
 
     int result;
     
+    std::cout << "Processing owner message(state = " << client_state << " : cmd = " << cmd << std::endl;
     switch(client_state) {
         case O_FREE:
             if(cmd == OS_REG_SESSION)
@@ -246,6 +238,7 @@ int IGDE_Server::process_owner_message(std::list<client *>::iterator client_it, 
                 {
                     char msg_text[] = "Session Registered";
                     reply = new IGDE_Message(SERVER_TYPE, SO_SESSION_REGD, 0, 0, msg_text);
+                    this->clients[client_index].state = O_ACCEPTING;
                 }
                 else
                 {
@@ -258,18 +251,19 @@ int IGDE_Server::process_owner_message(std::list<client *>::iterator client_it, 
             if(cmd == OS_BYE)
             {
                 char msg_text[] = "Bye";
-                (*client_it)->state=O_FULL;
+                this->clients[client_index].state=O_FULL;
                 reply = new IGDE_Message(SERVER_TYPE, SO_BYE, 0, 0, msg_text);
                 result = reply->send_msg(client_fd);
             }
             break;
-        case O_OPEN:
+        case O_ACCEPTING:
             if(cmd == OS_END_SESSION)
             {
                 if(this->remove_session(client_fd,msg))
                 {
                     char msg_text[] = "Session Removed";
                     reply = new IGDE_Message(SERVER_TYPE, SO_SESSION_ENDED, 0, 0, msg_text);
+                    this->clients[client_index].state = O_FREE;
                 }
                 else
                 {
@@ -280,7 +274,7 @@ int IGDE_Server::process_owner_message(std::list<client *>::iterator client_it, 
             }
             if(cmd == OS_CLOSE_SESSION)
             {
-                (*client_it)->state = O_FULL;
+                this->clients[client_index].state = O_FULL;
                 char msg_text[] = "Session Closed";
                 reply = new IGDE_Message(SERVER_TYPE, SO_SESSION_CLOSED, 0, 0, msg_text);
                 result = reply->send_msg(client_fd);
@@ -293,6 +287,8 @@ int IGDE_Server::process_owner_message(std::list<client *>::iterator client_it, 
                 {
                     char msg_text[] = "Session Removed";
                     reply = new IGDE_Message(SERVER_TYPE, SO_SESSION_ENDED, 0, 0, msg_text);
+                    this->clients[client_index].state = O_FREE;
+
                 }
                 else
                 {
@@ -303,7 +299,7 @@ int IGDE_Server::process_owner_message(std::list<client *>::iterator client_it, 
             }
             if(cmd == OS_OPEN_SESSION)
             {
-                (*client_it)->state = O_OPEN;
+                this->clients[client_index].state = O_ACCEPTING;
                 char msg_text[] = "Session Opened";
                 reply = new IGDE_Message(SERVER_TYPE, SO_SESSION_OPENED, 0, 0, msg_text);
                 result = reply->send_msg(client_fd);
@@ -315,10 +311,10 @@ int IGDE_Server::process_owner_message(std::list<client *>::iterator client_it, 
     return 0;
 }
 
-int IGDE_Server::process_editor_message(std::list<client *>::iterator client_it, IGDE_Message * msg)
+int IGDE_Server::process_editor_message(int client_index, IGDE_Message * msg)
 {
-    int client_fd = (*client_it)->fd;
-    int client_state = (*client_it)->state;
+    //int client_fd = this->clients[client_index].fd;
+    int client_state = this->clients[client_index].state;
     
     switch(client_state) {
         case E_NEW_EDITOR:
@@ -417,6 +413,7 @@ int IGDE_Server::remove_session(int client_id, IGDE_Message * msg)
             it = this->session_list.erase(it);
     }
 
-    return (int)(org_size - this->session_list.size());
+    return 1;
+    //return (int)(org_size - this->session_list.size());
 
 }

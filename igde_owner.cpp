@@ -428,14 +428,22 @@ int IGDE_Owner::process_srv_msg(IGDE_Message * msg)
             }
             break;
         case O_CONNECTED :
-            srv_reply = new IGDE_Message(OWNER_TYPE, OS_OK, 0, 0, huh_msg);
-            break;
         case O_ACCEPTING :
-            srv_reply = new IGDE_Message(OWNER_TYPE, OS_OK, 0, 0, huh_msg);
-            break;
         case O_FULL :
-            srv_reply = new IGDE_Message(OWNER_TYPE, OS_OK, 0, 0, huh_msg);
-
+        case O_ENDING:
+            if(msg_cmd == SO_SESSION_REGD)
+            {
+                
+            }
+            if(msg_cmd == SO_SESSION_ENDED)
+            {
+                IGDE_Message * control_reply = new IGDE_Message(OWNER_TYPE,OC_ENDING_SESSION, 0, 0, NULL);
+                control_reply->send_msg(this->controller.fd);
+            }
+            else
+            {
+                srv_reply = new IGDE_Message(OWNER_TYPE, OS_OK, 0, 0, huh_msg);
+            }
             break;
         default:
             srv_reply = new IGDE_Message(OWNER_TYPE, OS_OK, 0, 0, huh_msg);
@@ -608,6 +616,7 @@ int IGDE_Owner::process_control_msg(IGDE_Message * msg)
                     IGDE_Message * srv_msg = new IGDE_Message(OWNER_TYPE, OS_REG_SESSION, 0, 0, reg_session_data);
                     srv_msg->send_msg(this->server_socket_fd);
                     reply = new IGDE_Message(OWNER_TYPE, OC_SESSION_STARTED, 0, 0, NULL);
+                    this->state = O_ACCEPTING;
                 }
                 else
                     reply = new IGDE_Message(OWNER_TYPE, OC_SESSION_NOT_STARTED, 0, 0, NULL);
@@ -622,16 +631,57 @@ int IGDE_Owner::process_control_msg(IGDE_Message * msg)
         case CO_END_SESSION :
             if(this->state == O_ACCEPTING || this->state == O_FULL)
             {
-                if(this->end_session())
-                    reply = new IGDE_Message(OWNER_TYPE, OC_SESSION_ENDED, 0, 0, NULL);
-                else
-                    reply = new IGDE_Message(OWNER_TYPE, OC_SESSION_NOT_ENDED, 0, 0, NULL);
+                std::cout << "Ending Session " << std::endl;
+                this->end_session();
             }
-            else
+            break;
+        case CO_DOWNLOAD_FILE:
+            char buffer[DOWNLOAD_CHUNK_SIZE];
+            std::streamsize char_count;
+            if(this->state == O_ENDING)
             {
-                reply = new IGDE_Message(OWNER_TYPE, CO_CMD_FAILED, 0, 0, NULL);
+                this->editted_ifd.open(this->session_filename);
+                if(this->editted_ifd.is_open())
+                {
+                    this->editted_ifd.read(buffer, DOWNLOAD_CHUNK_SIZE);
+                    char_count = this->editted_ifd.gcount();
+                    buffer[char_count] = '\0';
+                    if(char_count < DOWNLOAD_CHUNK_SIZE)
+                    {
+                        IGDE_Message * msg = new IGDE_Message(OWNER_TYPE, OC_DOWNLOAD_LAST_CHUNK, (TBD_T)char_count, 0, buffer);
+                        msg->send_msg(this->controller.fd);
+                    }
+                    else
+                    {
+                        IGDE_Message * msg = new IGDE_Message(OWNER_TYPE, OC_DOWNLOAD_CHUNK, (TBD_T)char_count, 0, buffer);
+                        msg->send_msg(this->controller.fd);
+                    }
+                }
             }
-            result = reply->send_msg(this->controller.fd);
+            break;
+        case CO_DOWNLOAD_CHUNK_OK:
+            if(this->editted_ifd.is_open())
+            {
+                this->editted_ifd.read(buffer, DOWNLOAD_CHUNK_SIZE);
+                char_count = this->editted_ifd.gcount();
+                buffer[char_count] = '\0';
+                if(char_count < DOWNLOAD_CHUNK_SIZE)
+                {
+                    IGDE_Message * msg = new IGDE_Message(OWNER_TYPE, OC_DOWNLOAD_LAST_CHUNK, (TBD_T)char_count, 0, buffer);
+                    msg->send_msg(this->controller.fd);
+                }
+                else
+                {
+                    IGDE_Message * msg = new IGDE_Message(OWNER_TYPE, OC_DOWNLOAD_CHUNK, (TBD_T)char_count, 0, buffer);
+                    msg->send_msg(this->controller.fd);
+                }
+            }
+            break;
+        case CO_DOWNLOAD_CHUNK_ERR:
+            break;
+        case CO_DOWNLOAD_DONE:
+            this->editted_ifd.close();
+            this->state = O_FREE;
             break;
         case CO_LIST_EDITORS :
             if(this->state == O_ACCEPTING)
@@ -735,6 +785,7 @@ int IGDE_Owner::open_session_socket()
 int IGDE_Owner::end_session()
 {
     
+    /*
     for(std::list<editor *>::iterator e_it = this->editors.begin();
         e_it != this->editors.end();
         e_it++)
@@ -742,6 +793,7 @@ int IGDE_Owner::end_session()
         IGDE_Message * editor_msg = new IGDE_Message(OWNER_TYPE, OE_BYE, 0, 0, NULL);
         editor_msg->send_msg((*e_it)->fd);
     }
+     */
     
     // Send end message to any connected editors
     // Remove event from queue
@@ -749,10 +801,59 @@ int IGDE_Owner::end_session()
     
     close(this->session_socket_fd);
     this->session_socket_fd = 0;
+    
+    IGDE_Message * srv_msg = new IGDE_Message(OWNER_TYPE, OS_END_SESSION, 0, 0, NULL);
+    srv_msg->send_msg(this->server_socket_fd);
+    this->state = O_ENDING;
+    
     return 1;
 }
 
 
+int IGDE_Owner::download_file()
+{
+    char buffer[UPLOAD_CHUNK_SIZE];
+    // Can we read the file?
+    this->editted_ifd.open(this->session_filename);
+    if(this->editted_ifd.is_open())
+    {
+        
+        std::streamsize char_count;
+        IGDE_Message * reply = new IGDE_Message;
+        
+        do
+        {
+            this->editted_ifd.read(buffer, UPLOAD_CHUNK_SIZE);
+            char_count = this->editted_ifd.gcount();
+            buffer[char_count] = '\0';
+            std::cout << "buffer == " << buffer << std::endl;
+            
+            
+            if(char_count < UPLOAD_CHUNK_SIZE)
+            {
+                IGDE_Message * msg = new IGDE_Message(CONTROL_TYPE, CO_UPLOAD_LAST_CHUNK, (TBD_T)char_count, 0, buffer);
+                msg->send_msg(this->control_socket_fd);
+            }
+            else
+            {
+                IGDE_Message * msg = new IGDE_Message(CONTROL_TYPE, CO_UPLOAD_CHUNK, (TBD_T)char_count, 0, buffer);
+                msg->send_msg(this->control_socket_fd);
+            }
+            reply->get_msg(this->control_socket_fd);
+            
+        } while(reply->get_cmd() == OC_UPLOAD_CHUNK_OK);
+        
+        if(reply->get_cmd() == OC_UPLOAD_DONE)
+            return 1;
+        else
+            return 0;
+    }
+    else
+    {
+        std::cout << "Unable to open file: " << this->session_filename << std::endl;
+        return 0;
+    }
+}
 int IGDE_Owner::open_session_file()
 {
     this->session_filepath  = this->temp_dir + this->session_filename;

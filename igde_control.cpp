@@ -318,10 +318,42 @@ void IGDE_Control::start_session()
 }
 void IGDE_Control::end_session()
 {
+    std::cout << "Enter filename for edits:";
+    std::getline(std::cin, this->editted_filename);
 
+    IGDE_Message * start_msg = new IGDE_Message(CONTROL_TYPE, CO_END_SESSION, 0, 0, NULL);
+    start_msg->send_msg(this->owner_socket_fd);
     
+    IGDE_Message * start_reply = new IGDE_Message;
+    start_reply->get_msg(this->owner_socket_fd);
     
+    if(start_reply->get_cmd() == OC_ENDING_SESSION)
+    {
+        std::cout << "Session is ending" << std::endl;
+        this->status = O_ENDING;
+        
+        IGDE_Message * start2_msg = new IGDE_Message(CONTROL_TYPE, CO_DOWNLOAD_FILE, 0, 0, NULL);
+        start2_msg->send_msg(this->owner_socket_fd);
+        
+        if(this->download_file())
+        {
+            IGDE_Message * end_msg = new IGDE_Message(CONTROL_TYPE, CO_DOWNLOAD_DONE, 0, 0, NULL);
+            end_msg->send_msg(this->owner_socket_fd);
+            this->status = O_CONNECTED;
+
+        }
+        else {
+            IGDE_Message * end_msg = new IGDE_Message(CONTROL_TYPE, CO_CMD_FAILED, 0, 0, NULL);
+            end_msg->send_msg(this->owner_socket_fd);
+            std::cout << "Owner was unable to end the session" << std::endl;
+            this->status = O_CONNECTED;
+            return;
+        }
+        
+    }
 }
+    
+
 void IGDE_Control::list_editors()
 {
     
@@ -371,6 +403,49 @@ int IGDE_Control::upload_file()
         std::cout << "Unable to open file: " << this->session_filename << std::endl;
         return 0;
     }
+}
+
+int IGDE_Control::download_file()
+{
+    IGDE_Message * reply = new IGDE_Message;
+    // Can we read the file?
+    this->session_ofd.open(this->editted_filename);
+    if(this->session_ofd.is_open())
+    {
+        
+        do {
+            reply->get_msg(this->owner_socket_fd);
+            if(reply->get_cmd() == OC_DOWNLOAD_CHUNK || reply->get_cmd() == OC_DOWNLOAD_LAST_CHUNK)
+                this->session_ofd << reply->get_data();
+
+        } while(reply->get_cmd() == OC_DOWNLOAD_CHUNK);
+        
+        if(reply->get_cmd() == OC_DOWNLOAD_LAST_CHUNK)
+        {
+            this->session_ofd << reply->get_data();
+            IGDE_Message * msg = new IGDE_Message(CONTROL_TYPE, CO_DOWNLOAD_DONE, 0, 0, NULL);
+            msg->send_msg(this->owner_socket_fd);
+            this->status = O_FREE;
+            this->session_ofd.close();
+            return 1;
+        }
+        else
+        {
+            IGDE_Message * msg = new IGDE_Message(CONTROL_TYPE, CO_CMD_FAILED, 0, 0, NULL);
+            msg->send_msg(this->owner_socket_fd);
+            return 0;
+        }
+
+
+    }
+    else
+    {
+        std::cout << "Unable to open new file for edits: " << this->editted_filename << std::endl;
+        IGDE_Message * msg = new IGDE_Message(CONTROL_TYPE, CO_CMD_FAILED, 0, 0, NULL);
+        msg->send_msg(this->owner_socket_fd);
+        return 0;
+    }
+    
 }
 
 

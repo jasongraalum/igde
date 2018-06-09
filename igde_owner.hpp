@@ -117,6 +117,9 @@ public:
     long close_session_ofd();
     std::string temp_dir = "/tmp/";
 
+    std::ifstream editted_ifd;
+    int download_file();
+    
     // Editors
     int connect_editor(int, struct sockaddr_in * );
     int disconnect_editor(int);

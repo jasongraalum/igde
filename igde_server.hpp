@@ -16,7 +16,7 @@
 #include "igde_common.hpp"
 #include "igde_message.hpp"
 
-
+#define MAX_CLIENTS 10
 
 class IGDE_Server
 {
@@ -54,16 +54,16 @@ private:
         struct sockaddr_storage * addr;
     };
     
-    std::list<client *> clients;
+    struct client clients[MAX_CLIENTS];
 
     // Called from start()
     int open_server_socket();
     int listen_loop(int);
     
     // Inside listen_loop()
-    int process_message(std::list<client *>::iterator, IGDE_Message *);
-    int process_owner_message(std::list<client *>::iterator, IGDE_Message *);
-    int process_editor_message(std::list<client *>::iterator, IGDE_Message *);
+    int process_message(int, IGDE_Message *);
+    int process_owner_message(int, IGDE_Message *);
+    int process_editor_message(int, IGDE_Message *);
 
     // Methods called from process_message()
     int add_client(int, struct sockaddr_in *);
